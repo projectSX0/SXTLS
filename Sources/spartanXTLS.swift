@@ -7,6 +7,10 @@ import struct Foundation.Data
 public typealias SXTLSContext = TLSServer
 public typealias CString = UnsafePointer<Int8>
 public typealias SXConnection = SXQueue
+public typealias ShouldProceed = Bool
+
+public let YES = true
+public let NO = false
 
 public class SXTLSLayer {
     public var supportingMethods: SendMethods = [.send]
@@ -16,6 +20,7 @@ public class SXTLSLayer {
     public init(service: SXService, context: SXTLSContext) {
         self.service = service
         self.servContext = context
+        self.service.supportingMethods = [.send]
     }
 }
 
@@ -25,12 +30,13 @@ extension TLSClient : Readable, Writable {
         return 4096
     }
     
-    public func write(data: Data) throws {
-        return try self.write(data: data)
+    public func read(size: Int) throws -> Data? {
+        let data: Data = try self.read(size: size)
+        return data.length == 0 ? nil : data
     }
     
-    public func read(size: Int) throws -> Data? {
-        return try self.read(size: size)
+    public func write(data: Data) throws {
+        let _: Int = try self.write(data: data)
     }
     
     public func done() {
@@ -40,21 +46,21 @@ extension TLSClient : Readable, Writable {
 
 extension SXTLSLayer : SXStreamService {
     
-    public func received(data: Data, from connection: SXConnection) throws -> Bool {
+    public func received(data: Data, from connection: SXConnection) throws -> ShouldProceed {
         return try service.received(data: data, from: connection)
     }
     
-    public func exceptionRaised(_ exception: Error, on connection: SXQueue) {
+    public func exceptionRaised(_ exception: Error, on connection: SXQueue) -> ShouldProceed {
         if let error = exception as? TLSError {
             switch error {
             case TLSError.filedescriptorNotWriteable, TLSError.filedescriptorNotReadable:
-                return
+                return YES
             default:
-                break
+                return NO
             }
         }
         
-        self.service.exceptionRaised(exception, on: connection)
+        return self.service.exceptionRaised(exception, on: connection)
     }
     
     public func accepted(socket: SXClientSocket, as connection: SXConnection) throws {
